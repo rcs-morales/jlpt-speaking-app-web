@@ -6,9 +6,6 @@
   <title>日本語 Voice Practice</title>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;700&family=Noto+Sans+JP:wght@300;400;500&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.min.js"></script>
-  <script type="importmap">
-    { "imports": { "@google/genai": "https://cdn.jsdelivr.net/npm/@google/genai/+esm" } }
-  </script>
   <script src="script.js"></script>
   <script>
     // Fallback: if XLSX doesn't load from CDN, load from alternative source
@@ -64,14 +61,20 @@
 
     <!-- AI Settings Section -->
     <div class="settings-section" id="ai-settings-section">
-      <h3>🤖 AI Answer Grading (Gemini)</h3>
-      <p>Enter your Google Gemini API key for intelligent answer checking with detailed feedback.</p>
-      <p style="font-size: 0.75rem; color: var(--muted); margin-bottom: 8px;">
-        Get a free API key at <a href="https://aistudio.google.com/apikey" target="_blank" style="color: var(--teal);">Google AI Studio</a>
-        — Free tier: 15 requests/min, ~1,500/day
+      <h3>🤖 AI Answer Grading</h3>
+      <p>Select a provider and enter your API key for intelligent answer checking.</p>
+      <div style="margin-bottom: 8px;">
+        <label for="api-provider-select" style="font-size: 0.85rem; font-weight: bold; margin-right: 8px;">Provider:</label>
+        <select id="api-provider-select" style="padding: 4px; border-radius: 4px; border: 1px solid var(--border); background: var(--paper-2); color: var(--text);" onchange="updateProviderHint()">
+          <option value="groq">Groq (Ultra-Fast Llama 3)</option>
+          <option value="openrouter">OpenRouter (Free Models)</option>
+        </select>
+      </div>
+      <p id="provider-hint" style="font-size: 0.75rem; color: var(--muted); margin-bottom: 8px;">
+        Get a free API key at <a href="https://console.groq.com/keys" target="_blank" style="color: var(--teal);">Groq Console</a> — Generous free tier for testing!
       </p>
       <div class="api-key-row">
-        <input type="password" id="api-key-input" class="api-key-input" placeholder="Paste your Gemini API key here…" autocomplete="off" />
+        <input type="password" id="api-key-input" class="api-key-input" placeholder="Paste your API key here…" autocomplete="off" />
         <button class="btn btn-secondary btn-sm" onclick="toggleKeyVisibility()" id="btn-toggle-key" title="Show/hide key">👁</button>
       </div>
       <div class="import-buttons" style="margin-top: 8px;">
@@ -80,6 +83,27 @@
         <button class="btn btn-secondary" onclick="clearApiKey()">🗑 Clear Key</button>
       </div>
       <div class="import-status" id="api-key-status"></div>
+      <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+        <label for="stt-mode-select" style="font-size: 0.85rem; font-weight: bold; margin-right: 8px;">Speech Recognition:</label>
+        <select id="stt-mode-select" style="padding: 4px; border-radius: 4px; border: 1px solid var(--border); background: var(--paper-2); color: var(--text);" onchange="saveSTTMode()">
+          <option value="ai">🤖 AI (Groq Whisper) — Best accuracy</option>
+          <option value="browser">🌐 Browser Built-in — Live preview</option>
+        </select>
+        <p style="font-size: 0.72rem; color: var(--muted); margin-top: 4px;">
+          AI mode uses Groq Whisper for superior Japanese recognition. Requires a Groq API key above.
+        </p>
+      </div>
+      <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+        <label for="jlpt-level-select" style="font-size: 0.85rem; font-weight: bold; margin-right: 8px;">Grading Strictness:</label>
+        <select id="jlpt-level-select" style="padding: 4px; border-radius: 4px; border: 1px solid var(--border); background: var(--paper-2); color: var(--text);" onchange="saveJLPTLevel()">
+          <option value="N5">N5 (Very Lenient, ignores STT homophones)</option>
+          <option value="N4">N4 (Moderate, minor vocabulary flexibility)</option>
+          <option value="N3">N3 (Strict, expects precise vocabulary & grammar)</option>
+        </select>
+        <p style="font-size: 0.72rem; color: var(--muted); margin-top: 4px;">
+          Adjusts how strictly the AI grades your pronunciation and vocabulary variations.
+        </p>
+      </div>
     </div>
 
     <button class="btn btn-primary btn-disabled" id="btn-start-practice" onclick="startPractice()" disabled>

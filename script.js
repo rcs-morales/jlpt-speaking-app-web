@@ -314,43 +314,57 @@ document.addEventListener('DOMContentLoaded', () => {
   updateStartButton();
 
   // Load saved API key
-  const savedKey = localStorage.getItem('gemini_api_key');
+  const savedKey = localStorage.getItem('api_key') || localStorage.getItem('gemini_api_key');
+  const savedProvider = localStorage.getItem('api_provider') || 'groq';
   if (savedKey) {
     const input = document.getElementById('api-key-input');
     if (input) input.value = savedKey;
-    updateAIStatusChip(true);
+    const providerSelect = document.getElementById('api-provider-select');
+    if (providerSelect) providerSelect.value = savedProvider;
+    if (typeof updateProviderHint === 'function') updateProviderHint();
+    updateAIStatusChip();
   }
+
+  // Load saved STT Mode
+  const savedSTTMode = localStorage.getItem('stt_mode') || 'ai';
+  const sttSelect = document.getElementById('stt-mode-select');
+  if (sttSelect) sttSelect.value = savedSTTMode;
+
+  // Load saved JLPT Level
+  const savedJLPTLevel = localStorage.getItem('jlpt_level') || 'N5';
+  const jlptSelect = document.getElementById('jlpt-level-select');
+  if (jlptSelect) jlptSelect.value = savedJLPTLevel;
 });
 
 // ─────────────────────────────────────────────
-// GEMINI AI INTEGRATION
+// AI INTEGRATION
 // ─────────────────────────────────────────────
-let _geminiAI = null;
 
-async function getGeminiAI() {
-  if (_geminiAI) return _geminiAI;
-  try {
-    const { GoogleGenAI } = await import('@google/genai');
-    const apiKey = localStorage.getItem('gemini_api_key');
-    if (!apiKey) return null;
-    _geminiAI = new GoogleGenAI({ apiKey });
-    return _geminiAI;
-  } catch (e) {
-    console.error('Failed to load Gemini SDK:', e);
-    return null;
+function updateProviderHint() {
+  const provider = document.getElementById('api-provider-select')?.value || 'groq';
+  const hintEl = document.getElementById('provider-hint');
+  if (hintEl) {
+    if (provider === 'groq') {
+      hintEl.innerHTML = 'Get a free API key at <a href="https://console.groq.com/keys" target="_blank" style="color: var(--teal);">Groq Console</a> — Generous free tier for testing!';
+    } else if (provider === 'openrouter') {
+      hintEl.innerHTML = 'Get a free API key at <a href="https://openrouter.ai/settings/keys" target="_blank" style="color: var(--teal);">OpenRouter</a> — Huge selection of free models.';
+    }
   }
 }
 
-function updateAIStatusChip(hasKey) {
+function updateAIStatusChip() {
+  const provider = localStorage.getItem('api_provider') || 'groq';
+  const apiKey = localStorage.getItem('api_key') || localStorage.getItem('gemini_api_key');
   const chip = document.getElementById('ai-status-chip');
   const text = document.getElementById('ai-status-text');
+  
   if (!chip || !text) return;
-  if (hasKey) {
-    text.textContent = 'Ready';
+  if (apiKey) {
     chip.classList.add('active');
+    text.textContent = provider === 'groq' ? 'Groq Active' : 'OpenRouter Active';
   } else {
-    text.textContent = 'Not configured';
     chip.classList.remove('active');
+    text.textContent = 'Not configured';
   }
 }
 
@@ -366,24 +380,54 @@ function showApiKeyStatus(message, type) {
 
 function saveApiKeyFromInput() {
   const input = document.getElementById('api-key-input');
-  const key = (input ? input.value : '').trim();
+  let provider = document.getElementById('api-provider-select')?.value || 'groq';
+  let key = input ? input.value : '';
+  key = key.replace(/[^\x21-\x7E]/g, ''); // Remove any non-visible/non-ASCII characters
+  if (input) input.value = key;
+  
+  // Auto-detect OpenRouter or Groq keys
+  const providerSelect = document.getElementById('api-provider-select');
+  if (key.startsWith('sk-or-v1-')) {
+    provider = 'openrouter';
+    if (providerSelect) providerSelect.value = 'openrouter';
+  } else if (key.startsWith('gsk_')) {
+    provider = 'groq';
+    if (providerSelect) providerSelect.value = 'groq';
+  }
+  if (providerSelect && typeof updateProviderHint === 'function') updateProviderHint();
+
   if (!key) {
     showApiKeyStatus('❌ Please enter an API key.', 'error');
     return;
   }
-  localStorage.setItem('gemini_api_key', key);
-  _geminiAI = null; // Reset cached instance so it uses the new key
-  updateAIStatusChip(true);
+  localStorage.setItem('api_key', key);
+  localStorage.setItem('api_provider', provider);
+  updateAIStatusChip();
   showApiKeyStatus('✅ API key saved!', 'success');
 }
 
 function clearApiKey() {
+  localStorage.removeItem('api_key');
   localStorage.removeItem('gemini_api_key');
-  _geminiAI = null;
+  localStorage.removeItem('api_provider');
   const input = document.getElementById('api-key-input');
   if (input) input.value = '';
-  updateAIStatusChip(false);
+  updateAIStatusChip();
   showApiKeyStatus('🗑 API key cleared. Grading will use local fallback.', 'info');
+}
+
+function saveSTTMode() {
+  const select = document.getElementById('stt-mode-select');
+  if (select) {
+    localStorage.setItem('stt_mode', select.value);
+  }
+}
+
+function saveJLPTLevel() {
+  const select = document.getElementById('jlpt-level-select');
+  if (select) {
+    localStorage.setItem('jlpt_level', select.value);
+  }
 }
 
 function toggleKeyVisibility() {
@@ -393,75 +437,208 @@ function toggleKeyVisibility() {
 }
 
 async function testApiConnection() {
-  const key = (document.getElementById('api-key-input')?.value || '').trim();
+  const input = document.getElementById('api-key-input');
+  let provider = document.getElementById('api-provider-select')?.value || 'gemini';
+  let key = input ? input.value : '';
+  key = key.replace(/[^\x21-\x7E]/g, ''); // Remove any non-visible/non-ASCII characters
+  if (input) input.value = key;
+
+  // Auto-detect OpenRouter keys
+  if (key.startsWith('sk-or-v1-')) {
+    provider = 'openrouter';
+    const providerSelect = document.getElementById('api-provider-select');
+    if (providerSelect) {
+      providerSelect.value = 'openrouter';
+      if (typeof updateProviderHint === 'function') updateProviderHint();
+    }
+  }
+
   if (!key) {
     showApiKeyStatus('❌ Please enter an API key first.', 'error');
     return;
   }
   showApiKeyStatus('🔄 Testing connection…', 'info');
   try {
-    const { GoogleGenAI } = await import('@google/genai');
-    const ai = new GoogleGenAI({ apiKey: key });
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
-      contents: 'Reply with exactly: OK',
-    });
-    const text = response.text || '';
-    if (text.toLowerCase().includes('ok')) {
-      showApiKeyStatus('✅ Connection successful! Gemini is ready.', 'success');
-    } else {
-      showApiKeyStatus('✅ Connected, got response: ' + text.substring(0, 50), 'success');
+    if (provider === 'groq') {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + key,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [{role: 'user', content: 'Reply with exactly: OK'}]
+        })
+      });
+      if (!response.ok) {
+        if (response.status === 401) throw new Error('API_KEY_INVALID');
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = await response.json();
+      const text = data.choices[0].message.content || '';
+      if (text.toLowerCase().includes('ok')) {
+        showApiKeyStatus('✅ Connection successful! Groq is ready.', 'success');
+      } else {
+        showApiKeyStatus('✅ Connected, got response: ' + text.substring(0, 50), 'success');
+      }
+    } else if (provider === 'openrouter') {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + key,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'openrouter/free',
+          messages: [{role: 'user', content: 'Reply with exactly: OK'}]
+        })
+      });
+      if (!response.ok) {
+        if (response.status === 401) throw new Error('API_KEY_INVALID');
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = await response.json();
+      const text = data.choices[0].message.content || '';
+      if (text.toLowerCase().includes('ok')) {
+        showApiKeyStatus('✅ Connection successful! OpenRouter is ready.', 'success');
+      } else {
+        showApiKeyStatus('✅ Connected, got response: ' + text.substring(0, 50), 'success');
+      }
     }
   } catch (e) {
     const msg = e.message || String(e);
     if (msg.includes('API_KEY_INVALID') || msg.includes('401')) {
-      showApiKeyStatus('❌ Invalid API key. Check your key at aistudio.google.com.', 'error');
+      showApiKeyStatus('❌ Invalid API key. Please check your key.', 'error');
     } else if (msg.includes('429')) {
-      showApiKeyStatus('⚠️ Rate limited — key works but you\'ve hit the free tier limit. Try again in a minute.', 'error');
+      showApiKeyStatus('⚠️ Rate limited — hit the free tier limit. Try again shortly.', 'error');
     } else {
       showApiKeyStatus('❌ Connection failed: ' + msg.substring(0, 80), 'error');
     }
   }
 }
+function getGradingPrompt(level, question, expectedAnswer, transcript) {
+  let strictnessRules = '';
+  
+  if (level === 'N5') {
+    strictnessRules = `
+- **SPEECH-TO-TEXT HOMOPHONE RULE (CRITICAL)**: The transcript is generated by Speech-to-Text. STT frequently outputs the wrong kanji for homophones (words that sound identical, e.g. transcribing 'seiri' as 生理 instead of 整理). If a word in the transcript sounds exactly the same as the correct answer, you MUST treat it as perfectly correct. Do not penalize homophone kanji errors.
+- Be EXTREMELY LENIENT with vocabulary. If the student uses a valid beginner alternative (e.g. わたしの instead of うちの), mark it correct.
+- Prioritize correct pronunciation and basic meaning. Do not be a strict grammarian for N5.`;
+  } else if (level === 'N4') {
+    strictnessRules = `
+- Be LENIENT with STT homophones (e.g. 生理 vs 整理). If it sounds the same, it is likely an STT artifact and should not be heavily penalized.
+- Be moderately strict with vocabulary and grammar, but accept valid N4-level alternatives.`;
+  } else {
+    strictnessRules = `
+- Expect precise vocabulary and correct grammar suitable for N3 level.
+- You may forgive obvious STT kanji homophone errors, but hold the student to a high standard for particle usage and verb conjugation.`;
+  }
 
-const GRADING_PROMPT_TEMPLATE = `You are a Japanese language teacher grading a JLPT N5 speaking practice answer.
+  return `You are a Japanese language teacher grading a JLPT ${level} speaking practice answer.
 
-Question asked: {question}
-Expected answer: {expectedAnswer}
-Student's spoken answer (speech-to-text transcript): {transcript}
+Question asked: ${question}
+Expected answer: ${expectedAnswer}
+Student's spoken answer (speech-to-text transcript): ${transcript}
 
 Evaluate the student's answer. Consider that the transcript comes from speech recognition and may contain minor recognition errors or kanji/katakana variations.
 
 Respond ONLY with valid JSON (no markdown, no code fences, no explanation outside JSON):
 {"correct":true or false,"score":0 to 100,"feedback":"1-2 sentence explanation in English","grammar_notes":"Grammar issues found, or empty string if none","particle_notes":"Particle usage issues, or empty string if none","vocabulary_notes":"Vocabulary issues, or empty string if none","suggested_answer":"The ideal answer if incorrect, or empty string if correct"}
 
-Grading rules:
-- Be LENIENT with: katakana vs hiragana differences, kanji vs kana representations, minor speech recognition artifacts, semantically equivalent answers using different but valid vocabulary
+CRITICAL JSON RULES:
+- Do NOT use double quotes (") inside any of your text values. Use single quotes (') instead.
+- Ensure the JSON is completely valid and properly escaped.
+- Do not output any text before or after the JSON object.
+
+Grading rules:${strictnessRules}
 - Be STRICT with: particle usage (で/に/を/が/は/へ), verb tense and conjugation (ます/ました/ません), answering the actual question asked
-- A student who answers with correct grammar and appropriate meaning but different vocabulary should generally be marked correct
+- When providing feedback, cite the EXACT kanji or kana used in the transcript. If providing kana for kanji, use standard readings (e.g. 猫 is ねこ, do not write にゃん) unless specifically written as such in the transcript.
 - If the transcript is garbled or empty, mark as incorrect with helpful feedback
-- Set score 80-100 for correct answers, 40-79 for partially correct, 0-39 for incorrect`;
+- Set score 80-100 for correct answers, 40-79 for partially correct, 0-39 for incorrect.`;
+}
+async function gradeWithAI(question, expectedAnswer, transcript) {
+  const provider = localStorage.getItem('api_provider') || 'groq';
+  const apiKey = localStorage.getItem('api_key') || localStorage.getItem('gemini_api_key');
+  if (!apiKey) return null;
 
-async function gradeWithGemini(question, expectedAnswer, transcript) {
   try {
-    const ai = await getGeminiAI();
-    if (!ai) return null; // No API key configured, fall back to local
+    const level = localStorage.getItem('jlpt_level') || 'N5';
+    const prompt = getGradingPrompt(level, question, expectedAnswer, transcript);
 
-    const prompt = GRADING_PROMPT_TEMPLATE
-      .replace('{question}', question)
-      .replace('{expectedAnswer}', expectedAnswer)
-      .replace('{transcript}', transcript);
+    let text = '';
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
-      contents: prompt,
-    });
+    if (provider === 'groq') {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + apiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          response_format: { type: "json_object" },
+          messages: [
+            { role: 'system', content: 'You are a Japanese language teacher.' },
+            { role: 'user', content: prompt }
+          ]
+        })
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error('Groq API failed:', response.status, errText);
+        return null;
+      }
+      const data = await response.json();
+      text = data.choices?.[0]?.message?.content || '';
+    } else if (provider === 'openrouter') {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + apiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'openrouter/free',
+          messages: [
+            { role: 'system', content: 'You are a Japanese language teacher.' },
+            { role: 'user', content: prompt }
+          ]
+        })
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error('OpenRouter API failed:', response.status, errText);
+        return null;
+      }
+      const data = await response.json();
+      text = data.choices?.[0]?.message?.content || '';
+    }
 
-    let text = (response.text || '').trim();
+    if (!text) {
+      console.error('AI returned empty text');
+      return null;
+    }
+
     // Strip markdown code fences if present
     text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+    const startIdx = text.indexOf('{');
+    const endIdx = text.lastIndexOf('}');
+    if (startIdx !== -1 && endIdx !== -1) {
+       text = text.substring(startIdx, endIdx + 1);
+    } else {
+      console.error('AI text did not contain JSON object:', text);
+      return null;
+    }
 
-    const result = JSON.parse(text);
+    let result;
+    try {
+      result = JSON.parse(text);
+    } catch (pe) {
+      console.error('Failed to parse AI JSON:', pe, 'Raw text:', text);
+      return null;
+    }
+
     return {
       correct: !!result.correct,
       score: typeof result.score === 'number' ? result.score : (result.correct ? 100 : 0),
@@ -470,10 +647,10 @@ async function gradeWithGemini(question, expectedAnswer, transcript) {
       particleNotes: result.particle_notes || '',
       vocabularyNotes: result.vocabulary_notes || '',
       suggestedAnswer: result.suggested_answer || '',
-      source: 'gemini'
+      source: provider
     };
   } catch (e) {
-    console.error('Gemini grading error:', e);
+    console.error('AI grading error:', e);
     return null; // Fallback to local grading
   }
 }
@@ -487,17 +664,24 @@ let results   = [];
 let synth         = window.speechSynthesis;
 let recog         = null;
 let listening     = false;
+let isChecking    = false;
 let liveTranscript = '';
 let micStream     = null;
+let mediaRecorder = null;
+let audioChunks   = [];
 
 function isSpeechRecognitionSupported() {
   return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 }
 
 function abortRecognition() {
-  if (!recog) return;
   listening = false;
-  try { recog.abort(); } catch (e) {}
+  if (recog) {
+    try { recog.abort(); } catch (e) {}
+  }
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    try { mediaRecorder.stop(); } catch (e) {}
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -997,21 +1181,20 @@ function showResult(gradeResult, answer) {
     const strong = document.createElement('strong');
     strong.textContent = 'Correct answer: ';
     rev.append(strong, document.createTextNode(gradeResult.suggestedAnswer || answer));
-  } else if (!correct) {
+  } else {
     rev.replaceChildren();
     const strong = document.createElement('strong');
-    strong.textContent = 'Expected: ';
+    strong.textContent = correct ? 'Expected answer: ' : 'Expected: ';
     rev.append(strong, document.createTextNode(answer));
-  } else {
-    rev.textContent = '';
   }
 
   // Show AI feedback details
   aiFb.replaceChildren();
-  if (gradeResult.source === 'gemini' && gradeResult.feedback) {
+  if (gradeResult.source !== 'local' && gradeResult.feedback) {
     const fbText = document.createElement('div');
     fbText.className = 'ai-feedback-text';
-    fbText.textContent = '🤖 ' + gradeResult.feedback;
+    const sourceIcon = gradeResult.source === 'openrouter' ? '🤖' : '🤖';
+    fbText.textContent = sourceIcon + ' ' + gradeResult.feedback;
     aiFb.appendChild(fbText);
 
     const notes = document.createElement('div');
@@ -1105,7 +1288,7 @@ function startListening(onError) {
   };
   recog.onend = () => {
     listening = false;
-    if (liveTranscript && document.getElementById('btn-next').classList.contains('hidden')) {
+    if (liveTranscript && document.getElementById('btn-next').classList.contains('hidden') && !isChecking) {
       showBtn('btn-submit', true);
       showBtn('btn-rerecord', true);
     }
@@ -1130,6 +1313,106 @@ function startListening(onError) {
   };
 
   recog.start();
+}
+
+function startAIRecording(onError) {
+  if (!micStream) {
+    onError('Microphone not available.');
+    return;
+  }
+  const provider = localStorage.getItem('api_provider') || 'groq';
+  const apiKey = localStorage.getItem('api_key');
+  if (provider !== 'groq' || !apiKey) {
+    onError('AI recording requires Groq API key.');
+    return;
+  }
+
+  liveTranscript = '';
+  audioChunks = [];
+  
+  try {
+    mediaRecorder = new MediaRecorder(micStream);
+  } catch (e) {
+    onError('MediaRecorder not supported: ' + e.message);
+    return;
+  }
+
+  mediaRecorder.ondataavailable = (e) => {
+    if (e.data.size > 0) audioChunks.push(e.data);
+  };
+
+  mediaRecorder.onstart = () => {
+    listening = true;
+    setStatus('listening', '🤖 AI Recording… speak clearly then click Submit');
+    
+    const ct = document.getElementById('transcript-content');
+    const ph = document.getElementById('transcript-placeholder');
+    const box = document.getElementById('transcript-box');
+    ph.classList.add('hidden');
+    ct.classList.remove('hidden');
+    box.classList.add('active');
+    
+    ct.innerHTML = '<div class="ai-recording-indicator"><div class="rec-dot"></div>Recording audio for AI transcription...</div>';
+    
+    showBtn('btn-submit', true);
+    showBtn('btn-rerecord', true);
+    showBtn('btn-skip', false);
+  };
+
+  mediaRecorder.onerror = (e) => {
+    listening = false;
+    onError('Recording error: ' + e.error);
+  };
+
+  mediaRecorder.start();
+}
+
+function stopAIRecording() {
+  return new Promise((resolve) => {
+    if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+      resolve(null);
+      return;
+    }
+    mediaRecorder.onstop = () => {
+      listening = false;
+      const blob = new Blob(audioChunks, { type: 'audio/webm' });
+      resolve(blob);
+    };
+    mediaRecorder.stop();
+  });
+}
+
+async function transcribeWithWhisper(audioBlob) {
+  const apiKey = localStorage.getItem('api_key');
+  if (!apiKey) return null;
+
+  const formData = new FormData();
+  formData.append('file', audioBlob, 'audio.webm');
+  formData.append('model', 'whisper-large-v3-turbo');
+  formData.append('language', 'ja');
+  // Add temperature 0 for max accuracy on short deterministic speech
+  formData.append('temperature', '0');
+
+  try {
+    const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + apiKey
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      console.error('Whisper API failed:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    return data.text || '';
+  } catch (e) {
+    console.error('Transcription error:', e);
+    return null;
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -1203,21 +1486,53 @@ function speakThenListen(item) {
 }
 
 function beginListen() {
-  startListening((err) => {
-    setStatus('', 'Error: ' + err);
-    if (err.includes('permission')) {
-      document.getElementById('warning-box').style.display = 'block';
-    }
-    showBtn('btn-rerecord', true);
-    showBtn('btn-skip',     true);
-  });
+  const sttMode = localStorage.getItem('stt_mode') || 'ai';
+  
+  if (sttMode === 'ai') {
+    startAIRecording((err) => {
+      setStatus('', 'Error: ' + err);
+      if (err.includes('permission')) {
+        document.getElementById('warning-box').style.display = 'block';
+      }
+      showBtn('btn-rerecord', true);
+      showBtn('btn-skip',     true);
+    });
+  } else {
+    startListening((err) => {
+      setStatus('', 'Error: ' + err);
+      if (err.includes('permission')) {
+        document.getElementById('warning-box').style.display = 'block';
+      }
+      showBtn('btn-rerecord', true);
+      showBtn('btn-skip',     true);
+    });
+  }
 }
 
 async function submitAnswer() {
-  abortRecognition();
+  if (isChecking) return;
+  isChecking = true;
+  
   showBtn('btn-submit', false);
   showBtn('btn-rerecord', false);
   showBtn('btn-skip', false);
+  
+  const sttMode = localStorage.getItem('stt_mode') || 'ai';
+  
+  if (sttMode === 'ai' && mediaRecorder && mediaRecorder.state === 'recording') {
+    setStatus('checking', '🤖 Transcribing audio…');
+    const ct = document.getElementById('transcript-content');
+    ct.innerHTML = '<div class="ai-transcribing-indicator">Transcribing<span class="dots"></span></div>';
+    
+    const audioBlob = await stopAIRecording();
+    if (audioBlob) {
+      const transcript = await transcribeWithWhisper(audioBlob);
+      if (transcript) liveTranscript = transcript;
+    }
+  } else {
+    abortRecognition();
+  }
+
   const item = QA[current];
   const raw = liveTranscript.trim();
 
@@ -1225,6 +1540,7 @@ async function submitAnswer() {
     setStatus('', 'No speech captured — try re-recording.');
     showBtn('btn-rerecord', true);
     showBtn('btn-skip',     true);
+    isChecking = false;
     return;
   }
 
@@ -1233,7 +1549,7 @@ async function submitAnswer() {
 
   // Try AI grading first, fall back to local
   setStatus('checking', '🤖 AI is checking your answer…');
-  let gradeResult = await gradeWithGemini(item.q, item.a, raw);
+  let gradeResult = await gradeWithAI(item.q, item.a, raw);
   if (!gradeResult) {
     setStatus('checking', '⚙️ Using local grading…');
     gradeResult = isCorrectLocal(raw, item.a);
@@ -1249,6 +1565,7 @@ async function submitAnswer() {
   showBtn('btn-rerecord', !gradeResult.correct);
   showBtn('btn-skip',     false);
   setStatus('', gradeResult.correct ? 'Correct! 🎉' : 'Incorrect. Review the feedback.');
+  isChecking = false;
 }
 
 function rerecordAnswer() {
@@ -1325,12 +1642,11 @@ function showResults() {
     ans.className = r.correct ? 'rc' : 'rw';
     ans.textContent = 'Heard: ' + r.transcript;
     div.append(tag, rq, ans);
-    if (!r.correct) {
-      const expected = document.createElement('div');
-      expected.className = 'ra';
-      expected.textContent = '✔ Expected: ' + r.a;
-      div.appendChild(expected);
-    }
+    // Always show expected answer
+    const expected = document.createElement('div');
+    expected.className = 'ra';
+    expected.textContent = (r.correct ? '📝 Expected: ' : '✔ Expected: ') + r.a;
+    div.appendChild(expected);
     // Show AI feedback in results
     if (r.gradeResult && r.gradeResult.feedback) {
       const fbDiv = document.createElement('div');

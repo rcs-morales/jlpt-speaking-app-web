@@ -179,6 +179,51 @@ header {
   font-family: 'Noto Sans JP', sans-serif;
 }
 
+/* ── AI Recording indicator ── */
+.ai-recording-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'Noto Sans JP', sans-serif;
+  font-size: 0.9rem;
+  color: var(--teal);
+  animation: ai-rec-fade 1.8s ease-in-out infinite;
+}
+.ai-recording-indicator .rec-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--red);
+  animation: ai-rec-pulse 1s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes ai-rec-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.5; }
+}
+@keyframes ai-rec-fade {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.ai-transcribing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Noto Sans JP', sans-serif;
+  font-size: 0.9rem;
+  color: var(--gold);
+}
+.ai-transcribing-indicator .dots::after {
+  content: '';
+  animation: ai-dots 1.5s steps(4, end) infinite;
+}
+@keyframes ai-dots {
+  0%  { content: ''; }
+  25% { content: '.'; }
+  50% { content: '..'; }
+  75% { content: '...'; }
+}
+
 /* ── Result badge ── */
 .result-badge {
   display: none;
