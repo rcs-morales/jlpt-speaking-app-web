@@ -1,6 +1,6 @@
 # 🗣️ JLPT Speaking Practice App
 
-A web-based application designed to help Japanese language learners practice their speaking skills. Currently tailored for **JLPT N5** level practice, the app uses state-of-the-art AI to evaluate pronunciation, vocabulary, and grammar in real-time.
+A web-based application designed to help Japanese language learners practice their speaking skills. Currently tailored for **JLPT N5** level practice, the app uses AI to evaluate pronunciation, vocabulary, and grammar in real-time.
 
 **🌍 Live Demo**: [Play JLPT Speaking Practice App on Vercel](https://jlpt-speaking-app-web.vercel.app/) *(Add a Groq API key in settings for AI speech recognition and grading. ElevenLabs is optional for AI text-to-speech.)*
 
@@ -12,6 +12,7 @@ A web-based application designed to help Japanese language learners practice the
 - **Dual STT Modes**: Seamlessly toggle between AI (Groq Whisper) for maximum accuracy, or your browser's built-in Web Speech API for live text preview.
 - **Dual TTS Modes**: Hear questions with the browser's built-in Japanese voice (free, instant) or **ElevenLabs** AI voices (ultra-realistic). AI TTS caches audio in `localStorage` to reduce API usage. Configure voice and playback speed in settings.
 - **Furigana Support**: Automatically generates furigana readings for spoken kanji to help you review your transcripts.
+- **Randomized Practice Sessions**: Questions are presented in a fresh, randomized order every time you start a new practice session.
 - **Local Privacy**: No backend server required. Your API keys and imported Q&A databases are stored entirely in your browser's `localStorage`.
 
 ## 🚀 Getting Started
@@ -61,6 +62,7 @@ You can use the live deployed version on Vercel immediately, or run it locally. 
 - [x] Advanced AI Grading (Groq)
 - [x] High-accuracy AI Speech Recognition (Whisper)
 - [x] Optional AI text-to-speech (ElevenLabs) with local audio cache
+- [x] Randomized Question Order per Session
 - [ ] Add N4 & N3 Q&A Databases
 - [ ] Mobile-responsive UI improvements
 
