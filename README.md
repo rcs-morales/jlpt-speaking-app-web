@@ -11,6 +11,7 @@ A web-based application designed to help Japanese language learners practice the
 - **Adjustable Strictness**: Choose your JLPT level (N5, N4, N3). The AI dynamically adjusts its grading rules, forgiving common Speech-to-Text kanji homophone errors at lower levels.
 - **Dual STT Modes**: Seamlessly toggle between AI (Groq Whisper) for maximum accuracy, or your browser's built-in Web Speech API for live text preview.
 - **Dual TTS Modes**: Hear questions with the browser's built-in Japanese voice (free, instant) or **ElevenLabs** AI voices (ultra-realistic). AI TTS caches audio in `localStorage` to reduce API usage. Configure voice and playback speed in settings.
+- **Immersive Live2D Avatar**: A bust-sized avatar that provides visual engagement and performs basic lip-sync animations while questions are read aloud.
 - **Furigana Support**: Automatically generates furigana readings for spoken kanji to help you review your transcripts.
 - **Randomized Practice Sessions**: Questions are presented in a fresh, randomized order every time you start a new practice session.
 - **Local Privacy**: No backend server required. Your API keys and imported Q&A databases are stored entirely in your browser's `localStorage`.
@@ -62,6 +63,7 @@ You can use the live deployed version on Vercel immediately, or run it locally. 
 - [x] Advanced AI Grading (Groq)
 - [x] High-accuracy AI Speech Recognition (Whisper)
 - [x] Optional AI text-to-speech (ElevenLabs) with local audio cache
+- [x] Integrated Live2D avatar with lip-sync
 - [x] Randomized Question Order per Session
 - [ ] Add N4 & N3 Q&A Databases
 - [ ] Mobile-responsive UI improvements
@@ -80,6 +82,10 @@ Other options (not built in yet):
 
 If you want a second provider later, Hugging Face’s router (`https://router.huggingface.co/v1`) is the most practical open-source-friendly choice—ideally behind a small backend proxy so API keys are not exposed in the browser.
 
-## 📄 License
+## 📄 License & Credits
 
 This project is open-source and available for educational use.
+
+**Live2D Avatar Credits**:
+This app uses a sample model provided by **Live2D Inc.** The use of these materials is governed by the [Free Material License Agreement](https://www.live2d.com/en/sdk/sample/) and the [Terms of Use for Live2D Cubism Sample Data](https://www.live2d.com/en/sdk/sample/). 
+
