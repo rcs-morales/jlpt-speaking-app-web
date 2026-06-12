@@ -118,8 +118,17 @@ export function startAIRecording(onError) {
   liveTranscript = '';
   audioChunks = [];
 
+  const preferredMimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+    ? 'audio/webm;codecs=opus'
+    : '';
+
   try {
-    mediaRecorder = new MediaRecorder(micStream);
+    mediaRecorder = preferredMimeType
+      ? new MediaRecorder(micStream, {
+          mimeType: preferredMimeType,
+          audioBitsPerSecond: 64000
+        })
+      : new MediaRecorder(micStream);
   } catch (e) {
     onError('MediaRecorder not supported: ' + e.message);
     return;
@@ -153,7 +162,7 @@ export function startAIRecording(onError) {
     onError('Recording error: ' + e.error);
   };
 
-  mediaRecorder.start();
+  mediaRecorder.start(250);
 }
 
 export function stopAIRecording() {
@@ -162,12 +171,19 @@ export function stopAIRecording() {
       resolve(null);
       return;
     }
+
     mediaRecorder.onstop = () => {
       listening = false;
-      const blob = new Blob(audioChunks, { type: 'audio/webm' });
+      const mimeType = (mediaRecorder.mimeType || 'audio/webm').split(';')[0].trim();
+      const blob = new Blob(audioChunks, { type: mimeType });
       resolve(blob);
     };
-    mediaRecorder.stop();
+
+    try {
+      mediaRecorder.stop();
+    } catch (e) {
+      resolve(null);
+    }
   });
 }
 

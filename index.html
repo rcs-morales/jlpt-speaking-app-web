@@ -80,12 +80,12 @@
           Get a free API key at <a href="https://console.groq.com/keys" target="_blank" style="color: var(--teal);">Groq
             Console</a> or <a href="groq-guide.html" style="color: var(--teal); text-decoration: underline;">follow our setup guide</a>.
         </p>
-        <div class="api-key-row">
+        <form class="api-key-row" onsubmit="event.preventDefault(); saveApiKeyFromInput();">
           <input type="password" id="api-key-input" class="api-key-input" placeholder="Paste your API key here…"
             autocomplete="off" />
-          <button class="btn btn-secondary btn-sm" onclick="toggleKeyVisibility()" id="btn-toggle-key"
+          <button type="button" class="btn btn-secondary btn-sm" onclick="toggleKeyVisibility()" id="btn-toggle-key"
             title="Show/hide key">👁</button>
-        </div>
+        </form>
         <div class="import-buttons" style="margin-top: 8px;">
           <button class="btn btn-import" onclick="saveApiKeyFromInput()">💾 Save Key</button>
           <button class="btn btn-secondary" onclick="testApiConnection()">🔌 Test Connection</button>
@@ -140,11 +140,10 @@
 
         <div id="voicevox-settings-section"
           style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
-          <div style="margin-bottom: 8px; text-align: left;">
-            <label style="font-size: 0.8rem; font-weight: bold; color: var(--text); display: block; margin-bottom: 6px;">Cloud Voice:</label>
-            <select id="voicevox-speaker-select"
-              style="width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--paper-2); color: var(--text); font-size: 0.82rem;"
-              onchange="saveVoicevoxSpeaker(); initAvatar();">
+          <label for="voicevox-speaker-select" style="font-size: 0.85rem; font-weight: bold; margin-right: 8px;">Cloud Voice:</label>
+          <select id="voicevox-speaker-select"
+            style="padding: 4px; border-radius: 4px; border: 1px solid var(--border); background: var(--paper-2); color: var(--text); max-width: 100%;"
+            onchange="saveVoicevoxSpeaker(); initAvatar();">
               <optgroup label="👩 Clear Female Voices">
                 <option value="3">Zundamon (Neutral & Clear)</option>
                 <option value="2">Shikoku Metan (Bright & Friendly)</option>
@@ -157,9 +156,7 @@
                 <option value="11">Takehiro (Mature Male)</option>
               </optgroup>
             </select>
-            <!-- Keep hidden input for backward compat -->
             <input type="hidden" id="voicevox-speaker-input" />
-          </div>
           <p style="font-size: 0.72rem; color: var(--muted);">
             Audio is generated instantly via the free community <strong>api.tts.quest</strong> service.
           </p>
@@ -170,7 +167,7 @@
             style="padding: 4px; border-radius: 4px; border: 1px solid var(--border); background: var(--paper-2); color: var(--text);"
             onchange="saveAvatarModel(); initAvatar();">
             <option value="simple">Simple (default)</option>
-            <option value="shizuku">Shizuku</option>
+            <option value="chitose">Chitose</option>
           </select>
           <p style="font-size: 0.72rem; color: var(--muted); margin-top: 4px;">
             Choose the Live2D avatar you want to use when practice starts.
@@ -245,7 +242,8 @@
 
       <div class="btn-row">
         <div class="btn-group-record">
-          <button class="btn btn-submit hidden" id="btn-submit" onclick="submitAnswer()">✔ Submit</button>
+          <button class="btn btn-submit hidden" id="btn-submit" onclick="finishRecording()">■ Finish Recording</button>
+          <button class="btn btn-primary hidden" id="btn-check" onclick="checkAnswer()">✔ Check Answer</button>
           <button class="btn btn-secondary hidden" id="btn-rerecord" onclick="rerecordAnswer()">🎤 Re-record</button>
         </div>
         <button class="btn btn-primary hidden" id="btn-next" onclick="nextQuestion()">Next →</button>

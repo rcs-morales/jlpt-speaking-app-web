@@ -14,7 +14,16 @@ export function getAvatarModelName() {
 export function saveAvatarModel() {
   const select = document.getElementById('avatar-model-select');
   if (!select) return;
-  localStorage.setItem('avatar_model', select.value);
+  const oldModel = localStorage.getItem('avatar_model');
+  const newModel = select.value;
+  
+  if (oldModel !== newModel) {
+    localStorage.setItem('avatar_model', newModel);
+    localStorage.removeItem('browser_tts_voice'); // Reset voice selection
+    import('./tts.js').then(({ populateBrowserVoiceSelect }) => {
+      populateBrowserVoiceSelect();
+    });
+  }
 }
 
 export function getAvatarModelConfig(name = getAvatarModelName()) {
@@ -102,9 +111,12 @@ export async function initAvatar() {
 
     live2dApp.stage.addChild(model);
 
-    model.scale.set(0.32);
+    const scale = avatarConfig.scale || 0.32;
+    const yOffset = avatarConfig.yOffset || 0.7;
+
+    model.scale.set(scale);
     model.anchor.set(0.5, 0.5);
-    model.position.set(live2dApp.screen.width / 2, live2dApp.screen.height * 0.7);
+    model.position.set(live2dApp.screen.width / 2, live2dApp.screen.height * yOffset);
 
     model.internalModel.on('beforeModelUpdate', () => {
       if (isAvatarSpeaking && live2dModel && live2dModel.internalModel && live2dModel.internalModel.coreModel) {
@@ -155,6 +167,11 @@ export function resetAvatarPose() {
 
 export function startAvatarMotionLoop() {
   if (!live2dModel || !live2dModel.internalModel || !live2dModel.internalModel.motionManager) {
+    return;
+  }
+
+  const avatarConfig = getAvatarModelConfig();
+  if (avatarConfig.disableRandomMotions) {
     return;
   }
 

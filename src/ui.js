@@ -13,7 +13,7 @@ export function showTranscript(text, active) {
   if (text) {
     ph.classList.add('hidden');
     ct.classList.remove('hidden');
-    ct.replaceChildren(document.createTextNode(text));
+    ct.textContent = text;
   } else {
     ph.classList.remove('hidden');
     ct.classList.add('hidden');
@@ -39,6 +39,11 @@ export function showCheckedTranscript(raw, furiganaReading, formatLiveTranscript
   checked.textContent = 'Checked (reading): ' + furiganaReading;
 
   ct.replaceChildren(heard, checked);
+}
+
+export function showResultPanel(visible) {
+  const badge = document.getElementById('result-badge');
+  if (badge) badge.classList.toggle('hidden', !visible);
 }
 
 export function showResult(gradeResult, answer) {

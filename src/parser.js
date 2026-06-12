@@ -37,7 +37,29 @@ export function parseCSV(content) {
   }
 
   function parseCSVLine(line) {
-    return line.split(',').map(field => field.trim());
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (ch === ',' && !inQuotes) {
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+
+    result.push(current.trim());
+    return result;
   }
 
   const headerLine = parseCSVLine(lines[0]);
@@ -258,7 +280,31 @@ export function transcriptToFuriganaForGrading(raw, answer) {
   return s;
 }
 
+export function toFuriganaHtml(text) {
+  let s = String(text || '');
+
+  const phrasePairs = [...KANJI_MAP, ...LESSON_KANJI_MAP]
+    .sort((a, b) => b[0].length - a[0].length);
+
+  for (const [kanji, reading] of phrasePairs) {
+    s = s.split(kanji).join(`<ruby>${kanji}<rt>${reading}</rt></ruby>`);
+  }
+
+  s = s.replace(/[一-鿿㐀-䶿]/g, (ch) => {
+    const reading = SINGLE_KANJI_READ[ch] || katakanaToHiragana(ch);
+    return reading && reading !== ch
+      ? `<ruby>${ch}<rt>${reading}</rt></ruby>`
+      : ch;
+  });
+
+  return s;
+}
+
 export function formatLiveTranscript(s) {
+  const level = localStorage.getItem('jlpt_level') || 'N5';
+  if (level === 'N5') {
+    return transcriptToFurigana(s);
+  }
   return transcriptToFurigana(s);
 }
 

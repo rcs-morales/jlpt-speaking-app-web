@@ -3,3 +3,12 @@ node_modules/
 .DS_Store
 Thumbs.db
 claude.md
+
+# Local test and regression files
+src/*_regression.test.js
+src/tts_rate_limit.test.js
+src/particle_test_plan.md
+src/remove_bad_exports.js
+src/test_groq.js
+
+test-results/

@@ -4,6 +4,7 @@ import { toggleSpeaking } from './avatar.js';
 let currentAudio = null;
 let currentAudioUrl = null;
 const prefetchCache = {};
+const inFlightVoicevoxRequests = new Map();
 
 export function toggleTTSVoicePanels(mode) {
   const browserContainer = document.getElementById('browser-voice-container');
@@ -20,23 +21,18 @@ export async function preloadVoicevoxAudio(text) {
   const cacheKey = `${speakerId}:${text}`;
 
   if (prefetchCache[cacheKey]) return prefetchCache[cacheKey];
+  if (inFlightVoicevoxRequests.has(cacheKey)) return inFlightVoicevoxRequests.get(cacheKey);
 
   const promise = (async () => {
     try {
       const apiUrl = `https://api.tts.quest/v3/voicevox/synthesis?text=${encodeURIComponent(text)}&speaker=${speakerId}`;
       let res;
-      let retries = 3;
-      while (retries > 0) {
-        res = await fetch(apiUrl);
-        if (res.status === 429) {
-          console.warn("TTS Quest API Rate Limited (429). Waiting before retry...");
-          await new Promise(r => setTimeout(r, 2000));
-          retries--;
-          continue;
-        }
-        if (!res.ok) throw new Error(`TTS Quest API failed: ${res.status}`);
-        break;
+      res = await fetch(apiUrl);
+      if (res.status === 429) {
+        console.warn('TTS Quest API Rate Limited (429). Skipping retry to avoid repeated bursts.');
+        return null;
       }
+      if (!res.ok) throw new Error(`TTS Quest API failed: ${res.status}`);
 
       const data = await res.json();
 
@@ -62,8 +58,13 @@ export async function preloadVoicevoxAudio(text) {
     }
   })();
 
+  inFlightVoicevoxRequests.set(cacheKey, promise);
   prefetchCache[cacheKey] = promise;
-  return promise;
+  try {
+    return await promise;
+  } finally {
+    inFlightVoicevoxRequests.delete(cacheKey);
+  }
 }
 
 function showVoicevoxLoading() {
@@ -123,8 +124,8 @@ async function speakWithVoicevox(text, onEnd) {
   } catch (err) {
     clearTimeout(loadingTimer);
     hideVoicevoxLoading();
-    console.error('Voicevox TTS failed, falling back to browser TTS:', err);
-    speakWithBrowser(text, onEnd);
+    console.error('Voicevox TTS failed:', err);
+    if (onEnd) onEnd();
   }
 }
 
@@ -201,6 +202,24 @@ export function speakQuestion(text, onEnd) {
   speakWithBrowser(text, wrapOnEnd);
 }
 
+export function speakFeedback(text, onEnd) {
+  setStatus('speaking', 'Speaking feedback…');
+  const wrapOnEnd = () => {
+    toggleSpeaking(false);
+    if (onEnd) onEnd();
+  };
+
+  // Result feedback should use the configured Voicevox path only.
+  const mode = localStorage.getItem('tts_mode') || 'browser';
+  if (mode === 'voicevox') {
+    speakWithVoicevox(text, wrapOnEnd);
+    return;
+  }
+
+  // Browser TTS is kept only as a last-resort fallback for non-Voicevox sessions.
+  speakWithBrowser(text, wrapOnEnd);
+}
+
 function getJapaneseVoices() {
   const synth = window.speechSynthesis;
   return synth ? synth.getVoices().filter(v => v.lang && v.lang.toLowerCase().startsWith('ja')) : [];
@@ -210,15 +229,28 @@ function scoreJapaneseBrowserVoice(voice) {
   const name = voice.name.toLowerCase();
   const lang = voice.lang.toLowerCase();
   let score = lang === 'ja-jp' ? 20 : 10;
+  
   const preferred = [
-    'google 日本語', 'google japanese', 'haruka', 'nanami', 'ichiro', 'ayumi',
+    'google 日本語', 'google japanese', 'haruka', 'nanami', 'ichiro', 'keita', 'ayumi',
     'kyoko', 'otoya', 'sakura', 'japanese', '日本語', 'microsoft',
   ];
   for (const hint of preferred) {
     if (name.includes(hint)) score += 15;
   }
+  
   if (name.includes('english') || name.includes(' us ') || name.includes('uk ')) score -= 100;
-  if (name.includes('male') && !name.includes('female')) score += 2;
+
+  const avatarModel = localStorage.getItem('avatar_model') || 'simple';
+  if (avatarModel === 'chitose') {
+    if (name.includes('male') && !name.includes('female')) score += 50;
+    if (name.includes('ichiro') || name.includes('keita')) score += 50;
+    if (name.includes('female') || name.includes('haruka') || name.includes('nanami')) score -= 50;
+  } else {
+    if (name.includes('female')) score += 50;
+    if (name.includes('haruka') || name.includes('nanami')) score += 50;
+    if (name.includes('male') && !name.includes('female')) score -= 50;
+  }
+
   return score;
 }
 

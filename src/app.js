@@ -5,7 +5,7 @@ import {
 } from './parser.js';
 import {
   setStatus, showTranscript, showCheckedTranscript,
-  showResult, showBtn, updateQACount, updateStartButton,
+  showResult, showResultPanel, showBtn, updateQACount, updateStartButton,
   showImportStatus, showApiKeyStatus, toggleKeyVisibility
 } from './ui.js';
 import {
@@ -19,7 +19,7 @@ import {
   getAvatarModelConfig
 } from './avatar.js';
 import {
-  speakQuestion, cancelCurrentSpeech, populateBrowserVoiceSelect,
+  speakQuestion, speakFeedback, cancelCurrentSpeech, populateBrowserVoiceSelect,
   toggleTTSVoicePanels, saveVoicevoxSpeaker, preloadVoicevoxAudio
 } from './tts.js';
 import {
@@ -196,7 +196,10 @@ async function loadQuestion() {
   qText.textContent = item.q;
   qText.style.display = 'none';
   const toggleBtn = document.getElementById('btn-toggle-question');
-  if (toggleBtn) toggleBtn.textContent = '👁 Show Text';
+  if (toggleBtn) {
+    toggleBtn.textContent = '👁 Show Text';
+    toggleBtn.classList.remove('highlight-pulse');
+  }
 
   document.getElementById('result-badge').className = 'result-badge';
   document.getElementById('warning-box').style.display = 'none';
@@ -208,15 +211,7 @@ async function loadQuestion() {
 
   const targetBox = document.getElementById('target-answer-box');
   if (targetBox) {
-    if (item.r && current < 3) {
-      const label = document.getElementById('target-label');
-      if (label) label.textContent = '🎯 Tutorial Mode (' + (current + 1) + '/3) Please say the sample answer clearly:';
-      document.getElementById('target-answer-text').textContent = item.a;
-      document.getElementById('target-romaji-text').textContent = item.r;
-      targetBox.style.display = 'block';
-    } else {
-      targetBox.style.display = 'none';
-    }
+    targetBox.style.display = 'none';
   }
 
   const pct = (current / QA.length) * 100;
@@ -224,6 +219,7 @@ async function loadQuestion() {
   document.getElementById('progress-label').textContent =
     'Question ' + (current + 1) + ' / ' + QA.length;
 
+  cancelCurrentSpeech();
   setStatus('speaking', 'Preparing…');
   try {
     const { resetAvatarPose } = await import('./avatar.js?' + Date.now());
@@ -243,6 +239,9 @@ function toggleQuestionText() {
   const qText = document.getElementById('question-text');
   const btn = document.getElementById('btn-toggle-question');
   if (!qText || !btn) return;
+
+  btn.classList.remove('highlight-pulse');
+
   if (qText.style.display === 'none') {
     qText.style.display = 'block';
     btn.textContent = '👁 Hide Text';
@@ -260,6 +259,31 @@ function speakThenListen(item) {
 }
 
 function beginListen() {
+  const item = QA[current];
+  const targetBox = document.getElementById('target-answer-box');
+  if (targetBox) {
+    if (item.r && current < 3) {
+      const label = document.getElementById('target-label');
+      if (label) label.textContent = '🎯 Tutorial Mode (' + (current + 1) + '/3) Please say the sample answer clearly:';
+      document.getElementById('target-answer-text').textContent = item.a;
+      document.getElementById('target-romaji-text').textContent = item.r;
+      targetBox.style.display = 'block';
+    } else if (current >= 3 && !hasGroqApiKey()) {
+      const label = document.getElementById('target-label');
+      if (label) {
+        label.innerHTML = '⚠️ AI Grading Not Configured<br><span style="font-size:0.75rem; font-weight:normal; color:var(--teal);">Showing answer key. Enable AI grading in settings for flexible answers and feedback!</span>';
+      }
+      document.getElementById('target-answer-text').textContent = item.a;
+      document.getElementById('target-romaji-text').textContent = item.r || '';
+      targetBox.style.display = 'block';
+    }
+  }
+
+  if (current < 3) {
+    const toggleBtn = document.getElementById('btn-toggle-question');
+    if (toggleBtn) toggleBtn.classList.add('highlight-pulse');
+  }
+
   const sttMode = localStorage.getItem('stt_mode') || 'ai';
   const useWhisper = sttMode === 'ai' && hasGroqApiKey();
 
@@ -287,7 +311,7 @@ function beginListen() {
   }
 }
 
-async function submitAnswer() {
+async function finishRecording() {
   if (isChecking) return;
   isChecking = true;
   window.isChecking = true;
@@ -297,6 +321,7 @@ async function submitAnswer() {
   showBtn('btn-skip', false);
 
   const sttMode = localStorage.getItem('stt_mode') || 'ai';
+  const item = QA[current];
 
   if (sttMode === 'ai' && hasGroqApiKey()) {
     setStatus('checking', '🤖 Transcribing audio…');
@@ -305,18 +330,24 @@ async function submitAnswer() {
 
     const audioBlob = await stopAIRecording();
     if (audioBlob) {
-      const transcript = await transcribeWithWhisper(audioBlob);
-      if (transcript) setLiveTranscript(transcript);
+      showTranscript('Transcribing…', true);
+      const transcript = await transcribeWithWhisper(audioBlob, item.a);
+      if (transcript) {
+        setLiveTranscript(transcript);
+        showTranscript(transcript, true);
+      } else {
+        setLiveTranscript('');
+        showTranscript('', false);
+      }
     }
   } else {
     abortRecognition();
   }
 
-  const item = QA[current];
   const raw = getLiveTranscript().trim();
 
-  if (!raw) {
-    setStatus('', 'No speech captured — try re-recording.');
+  if (!raw || raw.startsWith('Transcribing')) {
+    setStatus('', 'Transcription failed or no speech captured — try re-recording.');
     showBtn('btn-rerecord', true);
     showBtn('btn-skip',     true);
     isChecking = false;
@@ -324,34 +355,70 @@ async function submitAnswer() {
     return;
   }
 
-  const furiganaReading = await import('./parser.js').then(m => m.transcriptToFuriganaForGrading(raw, item.a));
+  setStatus('', 'Transcript ready. Review it, then click Check Answer.');
+  showBtn('btn-check', true);
+  showBtn('btn-rerecord', true);
+  showBtn('btn-skip', true);
+  isChecking = false;
+  window.isChecking = false;
+}
+
+async function checkAnswer() {
+  if (isChecking) return;
+  isChecking = true;
+  window.isChecking = true;
+
+  showBtn('btn-check', false);
+  showBtn('btn-rerecord', false);
+  showBtn('btn-skip', false);
+
+  const item = QA[current];
+  const raw = getLiveTranscript().trim();
+
+  const level = localStorage.getItem('jlpt_level') || 'N5';
+  const furiganaReading = await import('./parser.js').then(m =>
+    level === 'N5' ? m.transcriptToFurigana(raw) : m.transcriptToFuriganaForGrading(raw, item.a)
+  );
   showCheckedTranscript(raw, furiganaReading, formatLiveTranscript);
 
   setStatus('checking', '🤖 AI is checking your answer…');
-  
-  // Prefetch the next question's audio safely while AI is grading (API is fully idle now)
-  if (current + 1 < QA.length) {
-    if (localStorage.getItem('tts_mode') === 'voicevox') {
-      preloadVoicevoxAudio(QA[current + 1].q);
-    }
-  }
+
+  // Do not prefetch result feedback audio during grading; it creates unnecessary cloud TTS traffic.
+  // The result audio will be prepared only after the answer has been graded.
 
   let gradeResult = await gradeWithAI(item.q, item.a, raw);
   if (!gradeResult) {
-    setStatus('checking', '⚙️ Using local grading…');
-    gradeResult = await isCorrectLocal(raw, item.a);
+    setStatus('checking', '⚙️ AI unavailable — using local grading…');
+    gradeResult = await isCorrectLocal(raw, item.a, item.q);
   }
 
   if (gradeResult.correct) score++;
+  const feedbackText = gradeResult.correct ? '正解です！' : '不正解です。';
   results.push({
     q: item.q, a: item.a, transcript: raw, furigana: furiganaReading,
     correct: gradeResult.correct, gradeResult: gradeResult
   });
+
+  showResultPanel(false);
+  if (localStorage.getItem('tts_mode') === 'voicevox') {
+    setStatus('checking', '🔄 Preparing result voice…');
+    const blob = await preloadVoicevoxAudio(feedbackText);
+    if (!blob) {
+      setStatus('checking', '⚠️ Voice response unavailable — showing result without audio.');
+    }
+  }
+
   showResult(gradeResult, item.a);
+  showResultPanel(true);
+  cancelCurrentSpeech();
+  setStatus('checking', '🔊 Speaking result feedback…');
+  speakFeedback(feedbackText, () => {
+    setStatus('', gradeResult.correct ? 'Correct! 🎉' : 'Incorrect. Review the feedback.');
+  });
   showBtn('btn-next',     true);
   showBtn('btn-rerecord', false);
+  showBtn('btn-check',    false);
   showBtn('btn-skip',     false);
-  setStatus('', gradeResult.correct ? 'Correct! 🎉' : 'Incorrect. Review the feedback.');
   isChecking = false;
   window.isChecking = false;
 }
@@ -365,6 +432,7 @@ function rerecordAnswer() {
   showBtn('btn-next',     false);
   showBtn('btn-rerecord', false);
   showBtn('btn-submit',   false);
+  showBtn('btn-check',    false);
   speakThenListen(item);
 }
 
@@ -552,10 +620,22 @@ document.addEventListener('DOMContentLoaded', () => {
 // Export functions to window for HTML buttons
 window.startPractice = startPractice;
 window.toggleQuestionText = toggleQuestionText;
-window.submitAnswer = submitAnswer;
+window.finishRecording = finishRecording;
+window.checkAnswer = checkAnswer;
 window.rerecordAnswer = rerecordAnswer;
 window.nextQuestion = nextQuestion;
 window.skipQuestion = skipQuestion;
 window.endSession = endSession;
+window.saveApiKeyFromInput = saveApiKeyFromInput;
+window.saveGradingModel = saveGradingModel;
+window.saveSTTMode = saveSTTMode;
+window.saveJLPTLevel = saveJLPTLevel;
+window.saveAvatarModel = saveAvatarModel;
+window.saveTTSMode = saveTTSMode;
+window.saveBrowserVoice = window.saveBrowserVoice || (() => {
+  const select = document.getElementById('browser-voice-select');
+  if (select) localStorage.setItem('browser_tts_voice', select.value);
+});
+window.saveVoicevoxSpeaker = saveVoicevoxSpeaker;
 window.restartApp = restartApp;
 window.clearDatabase = clearDatabase;
