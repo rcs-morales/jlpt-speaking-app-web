@@ -62,6 +62,9 @@ export const GROQ_GRADING_MODELS = {
 export const AVATAR_MODELS = {
   simple: {
     label: 'Simple',
+    voiceProfile: 'female',
+    browserVoiceHints: ['microsoft sayaka', 'sayaka'],
+    mouthParamIds: ['PARAM_MOUTH_OPEN_Y'],
     paths: [
       'models/simple/runtime/simple.model3.json',
       'simple/runtime/simple.model3.json'
@@ -71,11 +74,38 @@ export const AVATAR_MODELS = {
   },
   chitose: {
     label: 'Chitose (Male)',
+    voiceProfile: 'male',
+    mouthParamIds: ['PARAM_MOUTH_OPEN_Y'],
     paths: [
       'models/chitose/runtime/chitose.model3.json'
     ],
     scale: 0.35,
     yOffset: 1.05,
+    disableRandomMotions: true
+  },
+  epsilon: {
+    label: 'Epsilon (Female)',
+    voiceProfile: 'female',
+    browserVoiceHints: ['google 日本語', 'google japanese'],
+    mouthParamIds: ['PARAM_MOUTH_OPEN_Y'],
+    paths: [
+      'models/Epsilon_free/runtime/Epsilon_free.model3.json'
+    ],
+    scale: 0.3,
+    yOffset: 0.92,
+    disableRandomMotions: true
+  },
+  haru: {
+    label: 'Haru Greeter (Female)',
+    voiceProfile: 'female',
+    browserVoiceHints: ['microsoft haruka', 'haruka'],
+    mouthParamIds: ['ParamMouthOpenY', 'PARAM_MOUTH_OPEN_Y'],
+    paths: [
+      'models/haru_greeter_pro_jp/runtime/haru_greeter_t05.model3.json'
+    ],
+    scale: 0.24,
+    yOffset: 1.22,
+    disablePointerTracking: true,
     disableRandomMotions: true
   }
 };

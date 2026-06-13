@@ -19,7 +19,7 @@ import {
   getAvatarModelConfig
 } from './avatar.js';
 import {
-  speakQuestion, speakFeedback, cancelCurrentSpeech, populateBrowserVoiceSelect,
+  speakQuestion, speakFeedback, cancelCurrentSpeech,
   toggleTTSVoicePanels, saveVoicevoxSpeaker, preloadVoicevoxAudio
 } from './tts.js';
 import {
@@ -48,11 +48,6 @@ window.saveTTSMode = () => {
     toggleTTSVoicePanels(mode);
     initAvatar();
   }
-};
-
-window.saveBrowserVoice = () => {
-  const select = document.getElementById('browser-voice-select');
-  if (select) localStorage.setItem('browser_tts_voice', select.value);
 };
 
 window.saveSTTMode = () => {
@@ -605,11 +600,6 @@ document.addEventListener('DOMContentLoaded', () => {
     toggleTTSVoicePanels(savedTTSMode);
   }
 
-  populateBrowserVoiceSelect();
-  const browserVoiceSelect = document.getElementById('browser-voice-select');
-  const savedBrowserVoice = localStorage.getItem('browser_tts_voice') || '';
-  if (browserVoiceSelect) browserVoiceSelect.value = savedBrowserVoice;
-
   const savedVvSpeaker = localStorage.getItem('voicevox_speaker') || '3';
   const vvSpeakerSelect = document.getElementById('voicevox-speaker-select');
   if (vvSpeakerSelect) {
@@ -632,10 +622,6 @@ window.saveSTTMode = saveSTTMode;
 window.saveJLPTLevel = saveJLPTLevel;
 window.saveAvatarModel = saveAvatarModel;
 window.saveTTSMode = saveTTSMode;
-window.saveBrowserVoice = window.saveBrowserVoice || (() => {
-  const select = document.getElementById('browser-voice-select');
-  if (select) localStorage.setItem('browser_tts_voice', select.value);
-});
 window.saveVoicevoxSpeaker = saveVoicevoxSpeaker;
 window.restartApp = restartApp;
 window.clearDatabase = clearDatabase;

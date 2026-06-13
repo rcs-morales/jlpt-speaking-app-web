@@ -227,7 +227,7 @@ header {
 /* ── Result badge ── */
 .result-badge {
   display: none;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   padding: 12px 18px;
   border-radius: 10px;
@@ -236,7 +236,14 @@ header {
 }
 .result-badge.correct  { display:flex; background: #e6f4ee; border: 1.5px solid #1a7a4a; color: var(--correct); }
 .result-badge.wrong    { display:flex; background: #fdf0ef; border: 1.5px solid #c0392b; color: var(--wrong); }
-.result-badge .icon    { font-size: 1.2rem; }
+.result-badge .icon    {
+  flex: 0 0 28px;
+  width: 28px;
+  line-height: 1.2;
+  margin-top: 1px;
+  font-size: 1.2rem;
+  text-align: center;
+}
 .result-badge .answer-reveal { margin-top: 6px; font-size: 0.83rem; color: var(--ink-mid); }
 
 /* ── Buttons ── */
@@ -536,6 +543,7 @@ header {
   color: var(--ink-mid);
   margin-bottom: 8px;
   font-style: italic;
+  overflow-wrap: anywhere;
 }
 .ai-feedback-notes {
   display: flex;
@@ -564,6 +572,8 @@ header {
 }
 .ai-note-text {
   color: var(--ink-mid);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .result-badge.correct .ai-note {
   background: rgba(26, 122, 74, 0.06);

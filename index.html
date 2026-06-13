@@ -127,15 +127,6 @@
             <option value="browser" selected>🌐 Browser Built-in — Free, instant</option>
             <option value="voicevox">🎙️ VOICEVOX — Local, High Quality</option>
           </select>
-          <div id="browser-voice-container"
-            style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
-            <label style="font-size: 0.8rem; color: var(--muted);">Browser voice:</label>
-            <select id="browser-voice-select"
-              style="padding: 2px 4px; border-radius: 4px; border: 1px solid var(--border); background: var(--paper-2); color: var(--text); font-size: 0.8rem; min-width: 12rem;"
-              onchange="saveBrowserVoice()">
-              <option value="">Auto — best Japanese voice</option>
-            </select>
-          </div>
         </div>
 
         <div id="voicevox-settings-section"
@@ -168,6 +159,8 @@
             onchange="saveAvatarModel(); initAvatar();">
             <option value="simple">Simple (default)</option>
             <option value="chitose">Chitose</option>
+            <option value="epsilon">Epsilon</option>
+            <option value="haru">Haru Greeter</option>
           </select>
           <p style="font-size: 0.72rem; color: var(--muted); margin-top: 4px;">
             Choose the Live2D avatar you want to use when practice starts.

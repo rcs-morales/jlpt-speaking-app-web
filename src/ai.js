@@ -124,6 +124,8 @@ Rules:
 - Judge meaning first.
 - Accept small noun, verb, adjective, or date changes if the meaning is still correct.
 - Only mark wrong for real changes in core action, tense, polarity, or who does what.
+- Mark wrong if the student gives only a fragment or answers only one part of a multi-part question.
+- If the expected answer contains multiple sentences, clauses, or a follow-up question, the student must cover all required parts.
 - For N5, do not fail for harmless wording differences.
 - Return ONLY valid JSON with these keys:
   {"correct": true, "score": 100, "feedback": "", "grammar_notes": "", "particle_notes": "", "vocabulary_notes": "", "suggested_answer": ""}
@@ -140,7 +142,8 @@ function createGrammarRuleHelper(transcriptToFurigana, katakanaToHiragana) {
 
   const normalizeText = (s) => {
     const text = String(s || '');
-    return katakanaToHiragana(transcriptToFurigana(text)).replace(/[\s　]/g, '');
+    return katakanaToHiragana(transcriptToFurigana(text))
+      .replace(/[\s　、。！？・「」『』【】〜〈〉（）,，.]/g, '');
   };
   const normalizeParticleToken = (token) => {
     const lower = String(token || '').toLowerCase();
@@ -204,10 +207,13 @@ function createGrammarRuleHelper(transcriptToFurigana, katakanaToHiragana) {
     const t = normalizeText(transcript);
     const particleSeqA = extractParticles(answer);
     const particleSeqT = extractParticles(transcript);
-    const particleMismatch = particleSeqA.length > 0 && particleSeqT.length > 0
+    const exactNormalizedMatch = a === t;
+    const particleMismatch = !exactNormalizedMatch
+      && particleSeqA.length > 0 && particleSeqT.length > 0
       && stripParticles(t) === stripParticles(a)
       && particleSeqA !== particleSeqT;
     const missingOrExtraParticles = (particleSeqA.length > 0 || particleSeqT.length > 0)
+      && !exactNormalizedMatch
       && stripParticles(t) === stripParticles(a)
       && particleSeqA !== particleSeqT;
 
@@ -223,6 +229,109 @@ function createGrammarRuleHelper(transcriptToFurigana, katakanaToHiragana) {
   };
 }
 
+const PREDICATE_MARKER_RE = /(ませんでした|ませんか|ましたか|でしたか|ますか|ですか|ました|でした|ません|ます|です|ましょう|ない|ている|ています|ていました|たい|たかった)/g;
+const PREDICATE_END_RE = /(ませんでした|ませんか|ましたか|でしたか|ますか|ですか|ました|でした|ません|ます|です|ましょう|ない|ている|ています|ていました|たい|たかった)$/;
+const DANGLING_END_RE = /(は|が|を|に|へ|で|と|の|も|から|まで|より|そして|それから)$/;
+const QUESTION_MARKER_RE = /(か[。！？?]|[？?])/g;
+
+function countMatches(text, re) {
+  re.lastIndex = 0;
+  return Array.from(String(text || '').matchAll(re)).length;
+}
+
+function analyzeAnswerCompleteness(question, answer, transcript, transcriptToFurigana, katakanaToHiragana) {
+  const normalize = (s) => katakanaToHiragana(transcriptToFurigana(String(s || '')))
+    .replace(STRIP_RE, '')
+    .toLowerCase();
+
+  const a = normalize(answer);
+  const t = normalize(transcript);
+  const predicateCountA = countMatches(a, PREDICATE_MARKER_RE);
+  const predicateCountT = countMatches(t, PREDICATE_MARKER_RE);
+  const questionParts = countMatches(question, QUESTION_MARKER_RE);
+  const requiredResponses = Math.max(predicateCountA, Math.min(questionParts, 2));
+  const hasExtraTrailingChars = t.startsWith(a) && t.slice(a.length).replace(STRIP_RE, '').length > 0;
+  const hasIncompleteSentence = PREDICATE_END_RE.test(a) && !PREDICATE_END_RE.test(t) && a.startsWith(t);
+  const hasDanglingEnding = t.length > 0 && !PREDICATE_END_RE.test(t) && DANGLING_END_RE.test(t);
+  const missingRequiredResponse = requiredResponses >= 2 && predicateCountT < requiredResponses;
+
+  let reason = '';
+  if (missingRequiredResponse) {
+    reason = 'This answer is incomplete: it does not cover every required part of the prompt.';
+  } else if (hasIncompleteSentence || hasDanglingEnding) {
+    reason = 'This answer appears to stop before the sentence is complete.';
+  } else if (hasExtraTrailingChars) {
+    reason = 'Extra trailing characters were detected. Please remove the extra words at the end.';
+  }
+
+  return {
+    incomplete: missingRequiredResponse || hasIncompleteSentence || hasDanglingEnding,
+    hasExtraTrailingChars,
+    reason,
+    predicateCountA,
+    predicateCountT,
+    requiredResponses
+  };
+}
+
+function parseAIGradingResponse(rawText) {
+  let text = String(rawText || '').replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  const startIdx = text.indexOf('{');
+  if (startIdx === -1) return null;
+
+  const endIdx = text.lastIndexOf('}');
+  const candidate = endIdx !== -1 && endIdx > startIdx
+    ? text.substring(startIdx, endIdx + 1)
+    : text.substring(startIdx);
+
+  try {
+    return JSON.parse(candidate);
+  } catch {
+    // Groq can occasionally truncate a long JSON string. Keep any complete
+    // fields that did arrive so the UI can still show useful grading feedback.
+  }
+
+  const parseStringField = (key) => {
+    const match = candidate.match(new RegExp('"' + key + '"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"', 's'));
+    if (!match) return '';
+    try {
+      return JSON.parse('"' + match[1] + '"');
+    } catch {
+      return match[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+    }
+  };
+  const parseBoolField = (key) => {
+    const match = candidate.match(new RegExp('"' + key + '"\\s*:\\s*(true|false)', 'i'));
+    return match ? match[1].toLowerCase() === 'true' : null;
+  };
+  const parseNumberField = (key) => {
+    const match = candidate.match(new RegExp('"' + key + '"\\s*:\\s*(-?\\d+(?:\\.\\d+)?)'));
+    return match ? Number(match[1]) : null;
+  };
+
+  const partial = {
+    correct: parseBoolField('correct'),
+    score: parseNumberField('score'),
+    feedback: parseStringField('feedback'),
+    grammar_notes: parseStringField('grammar_notes'),
+    particle_notes: parseStringField('particle_notes'),
+    vocabulary_notes: parseStringField('vocabulary_notes'),
+    suggested_answer: parseStringField('suggested_answer')
+  };
+
+  const hasUsefulFeedback = partial.correct !== null
+    || partial.score !== null
+    || partial.feedback
+    || partial.grammar_notes
+    || partial.particle_notes
+    || partial.vocabulary_notes;
+
+  if (!hasUsefulFeedback) return null;
+  if (partial.correct === null) partial.correct = false;
+  if (partial.score === null) partial.score = partial.correct ? 100 : 0;
+  return partial;
+}
+
 export async function gradeWithAI(question, expectedAnswer, transcript) {
   const apiKey = localStorage.getItem('api_key') || localStorage.getItem('gemini_api_key');
   if (!apiKey) return null;
@@ -230,25 +339,48 @@ export async function gradeWithAI(question, expectedAnswer, transcript) {
   try {
     const level = localStorage.getItem('jlpt_level') || 'N5';
     const prompt = getGradingPrompt(level, question, expectedAnswer, transcript);
+    const requestBody = {
+      model: getGradingModel(),
+      temperature: 0.1,
+      max_tokens: 520,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: 'You are a Japanese language teacher. Return compact valid JSON only.' },
+        { role: 'user', content: prompt }
+      ]
+    };
 
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    let response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': 'Bearer ' + apiKey,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        model: getGradingModel(),
-        temperature: 0.1,
-        max_tokens: 180,
-        messages: [
-          { role: 'system', content: 'You are a Japanese language teacher.' },
-          { role: 'user', content: prompt }
-        ]
-      })
+      body: JSON.stringify(requestBody)
     });
     if (!response.ok) {
       const errText = await response.text();
+      if (/response_format|json_object/i.test(errText)) {
+        const fallbackBody = { ...requestBody };
+        delete fallbackBody.response_format;
+        response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + apiKey,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(fallbackBody)
+        });
+        if (response.ok) {
+          const data = await response.json();
+          let text = data.choices?.[0]?.message?.content || '';
+          if (!text) {
+            console.error('AI returned empty text');
+            return null;
+          }
+          return finalizeAIGradingResult(text, question, expectedAnswer, transcript);
+        }
+      }
       console.error('Groq API failed:', response.status, errText);
       return null;
     }
@@ -260,21 +392,17 @@ export async function gradeWithAI(question, expectedAnswer, transcript) {
       return null;
     }
 
-    text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-    const startIdx = text.indexOf('{');
-    const endIdx = text.lastIndexOf('}');
-    if (startIdx !== -1 && endIdx !== -1) {
-       text = text.substring(startIdx, endIdx + 1);
-    } else {
-      console.error('AI text did not contain JSON object:', text);
-      return null;
-    }
+    return finalizeAIGradingResult(text, question, expectedAnswer, transcript);
+  } catch (e) {
+    console.error('AI grading error:', e);
+    return null;
+  }
+}
 
-    let result;
-    try {
-      result = JSON.parse(text);
-    } catch (pe) {
-      console.error('Failed to parse AI JSON:', pe, 'Raw text:', text);
+async function finalizeAIGradingResult(text, question, expectedAnswer, transcript) {
+    const result = parseAIGradingResponse(text);
+    if (!result) {
+      console.error('AI text did not contain parseable grading JSON:', text);
       return null;
     }
 
@@ -288,6 +416,7 @@ export async function gradeWithAI(question, expectedAnswer, transcript) {
     const { katakanaToHiragana, transcriptToFurigana } = await import('./parser.js');
     const analyzeGrammar = createGrammarRuleHelper(transcriptToFurigana, katakanaToHiragana);
     const grammarSignals = analyzeGrammar(expectedAnswer, transcript);
+    const completionSignals = analyzeAnswerCompleteness(question, expectedAnswer, transcript, transcriptToFurigana, katakanaToHiragana);
     const detectTense = (text) => {
       const normalized = transcriptToFurigana(String(text || '')).replace(/[\s\u3000]/g, '');
       const patterns = [
@@ -348,40 +477,48 @@ export async function gradeWithAI(question, expectedAnswer, transcript) {
     const particleMismatch = particleWrong || (
       particlesInAnswer.length > 0 &&
       particlesInTranscript.length > 0 &&
-      normT === normA &&
+      normT !== normA &&
       particlesInTranscript !== particlesInAnswer
     );
     const localResult = await isCorrectLocal(transcript, expectedAnswer);
     const aiLooksWrong = !result.correct && localResult.correct && localResult.score >= 70 && !particleMismatch;
     const hasTenseProblem = tenseMismatch || questionAnswerTenseMismatch || grammarSignals.tenseMismatch || grammarSignals.polarityMismatch;
-    const isCorrect = hasTenseProblem ? false : (particleMismatch ? false : (aiLooksWrong ? true : !!result.correct));
-    const scoreVal = hasTenseProblem
-      ? Math.min(typeof result.score === 'number' ? result.score : 70, 35)
-      : (typeof result.score === 'number'
-          ? Math.min(result.score, particleMismatch ? 25 : 100)
-          : (particleMismatch ? 25 : (aiLooksWrong ? localResult.score : (result.correct ? 100 : 0))));
-    const grammarVal = hasTenseProblem
+    const hasCompletionProblem = completionSignals.incomplete || completionSignals.hasExtraTrailingChars;
+    const isCorrect = hasCompletionProblem ? false : (hasTenseProblem ? false : (particleMismatch ? false : (aiLooksWrong ? true : !!result.correct)));
+    let scoreVal;
+    if (hasCompletionProblem) {
+      scoreVal = Math.min(typeof result.score === 'number' ? result.score : 70, completionSignals.incomplete ? 40 : 35);
+    } else if (hasTenseProblem) {
+      scoreVal = Math.min(typeof result.score === 'number' ? result.score : 70, 35);
+    } else if (aiLooksWrong) {
+      scoreVal = Math.max(typeof result.score === 'number' ? result.score : 0, localResult.score);
+    } else if (typeof result.score === 'number') {
+      scoreVal = Math.min(result.score, particleMismatch ? 25 : 100);
+    } else {
+      scoreVal = particleMismatch ? 25 : (result.correct ? 100 : 0);
+    }
+    const grammarVal = hasCompletionProblem
+      ? completionSignals.reason
+      : (hasTenseProblem
       ? (questionAnswerTenseMismatch
         ? 'Question and answer tense do not match.'
         : 'Verb tense error: used present tense (ます) instead of required past tense (ました).')
-      : sanitize(result.grammar_notes);
+      : sanitize(result.grammar_notes));
 
     return {
       correct: isCorrect,
       score: scoreVal,
-      feedback: particleMismatch
+      feedback: hasCompletionProblem
+        ? completionSignals.reason
+        : (particleMismatch
         ? 'Particle usage should follow the expected pattern in this level.'
-        : (aiLooksWrong ? 'Meaning is correct; minor wording differences are acceptable.' : sanitize(result.feedback)),
+        : (aiLooksWrong ? 'Meaning is correct; minor wording differences are acceptable.' : sanitize(result.feedback))),
       grammarNotes: grammarVal,
-      particleNotes: sanitize(result.particle_notes),
-      vocabularyNotes: sanitize(result.vocabulary_notes),
-      suggestedAnswer: sanitize(result.suggested_answer) || (tenseMismatch ? expectedAnswer : ''),
+      particleNotes: aiLooksWrong ? '' : sanitize(result.particle_notes),
+      vocabularyNotes: aiLooksWrong ? '' : sanitize(result.vocabulary_notes),
+      suggestedAnswer: sanitize(result.suggested_answer) || (tenseMismatch || hasCompletionProblem ? expectedAnswer : ''),
       source: 'groq'
     };
-  } catch (e) {
-    console.error('AI grading error:', e);
-    return null;
-  }
 }
 
 export async function transcribeWithWhisper(audioBlob, expectedAnswer = '') {
@@ -473,12 +610,11 @@ export async function isCorrectLocal(rawTranscript, answer, question = '') {
   let grammarNotes = '';
   let particleNotes = '';
 
-  const predicateEnders = /(ます|ました|です|でした|ない|ません|ませんでした|ている|ていました|たい|たかった|ますか|でしたか|ませんか)$/;
-  const hasExtraTrailingChars = t.startsWith(a) && t.slice(a.length).replace(STRIP_RE, '').length > 0;
-  const hasIncompleteSentence = predicateEnders.test(a) && !predicateEnders.test(t) && a.startsWith(t);
-  if (hasExtraTrailingChars) {
-    finalScore = Math.min(finalScore, 35);
-    grammarNotes = 'Extra trailing characters were detected. Please remove the extra words at the end.';
+  const completionSignals = analyzeAnswerCompleteness(question, answer, rawTranscript, transcriptToFurigana, katakanaToHiragana);
+  const hasCompletionProblem = completionSignals.incomplete || completionSignals.hasExtraTrailingChars;
+  if (completionSignals.incomplete || completionSignals.hasExtraTrailingChars) {
+    finalScore = Math.min(finalScore, completionSignals.incomplete ? 40 : 35);
+    grammarNotes = completionSignals.reason;
   }
 
   // N5-friendly: small wording differences should not be treated as hard failures.
@@ -579,7 +715,9 @@ export async function isCorrectLocal(rawTranscript, answer, question = '') {
     } else if (missingParticles.length > 0) {
       particleNotes = 'Check your particles: ' + missingParticles.join(', ') + ' seems missing or incorrect.';
     }
-    if (hasPolarityProblem) {
+    if (hasCompletionProblem) {
+      grammarNotes = completionSignals.reason;
+    } else if (hasPolarityProblem) {
       grammarNotes = 'Polarity mismatch: positive/negative form does not match the expected answer.';
     } else if (hasTenseProblem || missingVerbs.length > 0) {
       grammarNotes = hasTenseProblem
@@ -591,7 +729,7 @@ export async function isCorrectLocal(rawTranscript, answer, question = '') {
   }
 
   finalScore = Math.max(0, finalScore);
-  const isCorrect = !hasExtraTrailingChars && !hasParticleMismatch && !hasTenseProblem && !hasIncompleteSentence && finalScore >= 45;
+  const isCorrect = !hasCompletionProblem && !hasParticleMismatch && !hasTenseProblem && finalScore >= 45;
 
   return {
     correct: isCorrect,

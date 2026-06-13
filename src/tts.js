@@ -1,5 +1,6 @@
 import { setStatus } from './ui.js';
 import { toggleSpeaking } from './avatar.js';
+import { AVATAR_MODELS } from './data.js';
 
 let currentAudio = null;
 let currentAudioUrl = null;
@@ -7,11 +8,9 @@ const prefetchCache = {};
 const inFlightVoicevoxRequests = new Map();
 
 export function toggleTTSVoicePanels(mode) {
-  const browserContainer = document.getElementById('browser-voice-container');
   const vvSettings = document.getElementById('voicevox-settings-section');
   const avatarSettings = document.getElementById('avatar-settings-section');
 
-  if (browserContainer) browserContainer.style.display = (mode === 'browser') ? 'flex' : 'none';
   if (vvSettings) vvSettings.style.display = (mode === 'voicevox') ? 'block' : 'none';
   if (avatarSettings) avatarSettings.style.display = (mode === 'browser') ? 'block' : 'none';
 }
@@ -225,6 +224,26 @@ function getJapaneseVoices() {
   return synth ? synth.getVoices().filter(v => v.lang && v.lang.toLowerCase().startsWith('ja')) : [];
 }
 
+function voiceMatchesHint(voice, hint) {
+  const normalizedHint = String(hint || '').toLowerCase();
+  const name = voice.name.toLowerCase();
+  const uri = voice.voiceURI.toLowerCase();
+  return name.includes(normalizedHint) || uri.includes(normalizedHint);
+}
+
+function pickAvatarMappedVoice(voices) {
+  const avatarModel = localStorage.getItem('avatar_model') || 'simple';
+  const avatarConfig = AVATAR_MODELS[avatarModel] || AVATAR_MODELS.simple;
+  const hints = avatarConfig.browserVoiceHints || [];
+
+  for (const hint of hints) {
+    const match = voices.find(v => voiceMatchesHint(v, hint));
+    if (match) return match;
+  }
+
+  return null;
+}
+
 function scoreJapaneseBrowserVoice(voice) {
   const name = voice.name.toLowerCase();
   const lang = voice.lang.toLowerCase();
@@ -241,13 +260,14 @@ function scoreJapaneseBrowserVoice(voice) {
   if (name.includes('english') || name.includes(' us ') || name.includes('uk ')) score -= 100;
 
   const avatarModel = localStorage.getItem('avatar_model') || 'simple';
-  if (avatarModel === 'chitose') {
+  const voiceProfile = (AVATAR_MODELS[avatarModel] || AVATAR_MODELS.simple).voiceProfile || 'female';
+  if (voiceProfile === 'male') {
     if (name.includes('male') && !name.includes('female')) score += 50;
     if (name.includes('ichiro') || name.includes('keita')) score += 50;
     if (name.includes('female') || name.includes('haruka') || name.includes('nanami')) score -= 50;
   } else {
     if (name.includes('female')) score += 50;
-    if (name.includes('haruka') || name.includes('nanami')) score += 50;
+    if (name.includes('haruka') || name.includes('nanami') || name.includes('ayumi') || name.includes('kyoko')) score += 50;
     if (name.includes('male') && !name.includes('female')) score -= 50;
   }
 
@@ -258,51 +278,12 @@ function pickJapaneseBrowserVoice() {
   const voices = getJapaneseVoices();
   if (!voices.length) return null;
 
-  const savedUri = localStorage.getItem('browser_tts_voice');
-  if (savedUri) {
-    const chosen = voices.find(v => v.voiceURI === savedUri);
-    if (chosen) return chosen;
-  }
+  const mappedVoice = pickAvatarMappedVoice(voices);
+  if (mappedVoice) return mappedVoice;
 
   return voices.reduce((best, v) => {
     const score = scoreJapaneseBrowserVoice(v);
     const bestScore = best ? scoreJapaneseBrowserVoice(best) : -1;
     return score > bestScore ? v : best;
   }, null);
-}
-
-export function populateBrowserVoiceSelect() {
-  const select = document.getElementById('browser-voice-select');
-  if (!select) return;
-
-  const synth = window.speechSynthesis;
-  if (synth && !select.dataset.voicesBound) {
-    synth.getVoices();
-    synth.addEventListener('voiceschanged', populateBrowserVoiceSelect, { once: false });
-    select.dataset.voicesBound = '1';
-  }
-
-  const savedUri = localStorage.getItem('browser_tts_voice') || '';
-  const voices = getJapaneseVoices().sort((a, b) => {
-    return scoreJapaneseBrowserVoice(b) - scoreJapaneseBrowserVoice(a);
-  });
-
-  select.replaceChildren();
-  const autoOpt = document.createElement('option');
-  autoOpt.value = '';
-  autoOpt.textContent = 'Auto — best Japanese voice';
-  select.appendChild(autoOpt);
-
-  for (const v of voices) {
-    const opt = document.createElement('option');
-    opt.value = v.voiceURI;
-    opt.textContent = v.name + ' (' + v.lang + ')';
-    select.appendChild(opt);
-  }
-
-  if (savedUri && voices.some(v => v.voiceURI === savedUri)) {
-    select.value = savedUri;
-  } else {
-    select.value = '';
-  }
 }

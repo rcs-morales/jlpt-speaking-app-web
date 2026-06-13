@@ -19,15 +19,55 @@ export function saveAvatarModel() {
   
   if (oldModel !== newModel) {
     localStorage.setItem('avatar_model', newModel);
-    localStorage.removeItem('browser_tts_voice'); // Reset voice selection
-    import('./tts.js').then(({ populateBrowserVoiceSelect }) => {
-      populateBrowserVoiceSelect();
-    });
   }
 }
 
 export function getAvatarModelConfig(name = getAvatarModelName()) {
   return AVATAR_MODELS[name] || AVATAR_MODELS.simple;
+}
+
+function setAvatarMouthOpen(value) {
+  const avatarConfig = getAvatarModelConfig();
+  const coreModel = live2dModel && live2dModel.internalModel && live2dModel.internalModel.coreModel;
+  if (!coreModel) return;
+
+  const mouthParamIds = avatarConfig.mouthParamIds || ['PARAM_MOUTH_OPEN_Y', 'ParamMouthOpenY'];
+  for (const paramId of mouthParamIds) {
+    try {
+      coreModel.setParameterValueById(paramId, value);
+    } catch (_) {
+      // Some models use Cubism default IDs, others use PascalCase IDs.
+    }
+  }
+}
+
+function keepAvatarFocusCentered() {
+  const avatarConfig = getAvatarModelConfig();
+  if (!avatarConfig.disablePointerTracking || !live2dModel) return;
+
+  try {
+    if (typeof live2dModel.focus === 'function') {
+      live2dModel.focus(0, 0);
+    }
+  } catch (_) { }
+
+  const coreModel = live2dModel.internalModel && live2dModel.internalModel.coreModel;
+  if (!coreModel) return;
+
+  const focusParams = [
+    'PARAM_ANGLE_X', 'PARAM_ANGLE_Y', 'PARAM_ANGLE_Z',
+    'PARAM_BODY_ANGLE_X', 'PARAM_BODY_ANGLE_Y', 'PARAM_BODY_ANGLE_Z',
+    'PARAM_EYE_BALL_X', 'PARAM_EYE_BALL_Y',
+    'ParamAngleX', 'ParamAngleY', 'ParamAngleZ',
+    'ParamBodyAngleX', 'ParamBodyAngleY', 'ParamBodyAngleZ',
+    'ParamEyeBallX', 'ParamEyeBallY'
+  ];
+
+  for (const paramId of focusParams) {
+    try {
+      coreModel.setParameterValueById(paramId, 0);
+    } catch (_) { }
+  }
 }
 
 export async function initAvatar() {
@@ -101,6 +141,11 @@ export async function initAvatar() {
     }
 
     live2dModel = model;
+    if (avatarConfig.disablePointerTracking) {
+      model.autoInteract = false;
+      model.interactive = false;
+      model.interactiveChildren = false;
+    }
 
     const motionManager = model.internalModel && model.internalModel.motionManager;
     if (motionManager && motionManager.state) {
@@ -119,11 +164,12 @@ export async function initAvatar() {
     model.position.set(live2dApp.screen.width / 2, live2dApp.screen.height * yOffset);
 
     model.internalModel.on('beforeModelUpdate', () => {
+      keepAvatarFocusCentered();
       if (isAvatarSpeaking && live2dModel && live2dModel.internalModel && live2dModel.internalModel.coreModel) {
         const mouthOpen = Math.sin(Date.now() * 0.015) * 0.5 + 0.5;
-        live2dModel.internalModel.coreModel.setParameterValueById('PARAM_MOUTH_OPEN_Y', mouthOpen);
+        setAvatarMouthOpen(mouthOpen);
       } else if (live2dModel && live2dModel.internalModel && live2dModel.internalModel.coreModel) {
-        live2dModel.internalModel.coreModel.setParameterValueById('PARAM_MOUTH_OPEN_Y', 0);
+        setAvatarMouthOpen(0);
       }
     });
 
@@ -148,7 +194,7 @@ export function resetAvatarPose() {
     'PARAM_ANGLE_X', 'PARAM_ANGLE_Y', 'PARAM_ANGLE_Z',
     'PARAM_BODY_ANGLE_X', 'PARAM_BODY_ANGLE_Y', 'PARAM_BODY_ANGLE_Z',
     'PARAM_EYE_BALL_X', 'PARAM_EYE_BALL_Y', 'PARAM_EYE_L_OPEN', 'PARAM_EYE_R_OPEN',
-    'PARAM_MOUTH_OPEN_Y'
+    'PARAM_MOUTH_OPEN_Y', 'ParamMouthOpenY'
   ];
 
   for (const paramId of neutralParams) {
